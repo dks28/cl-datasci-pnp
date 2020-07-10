@@ -1,0 +1,604 @@
+\documentclass[10pt, twoside, a4paper]{article}
+
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+\usepackage{subcaption}
+
+\usepackage{graphicx}
+\usepackage[margin=0.87in]{geometry}
+\usepackage{amssymb}
+\usepackage{color, colortbl}
+\usepackage{amsmath}
+\usepackage[backend=biber]{biblatex}
+\addbibresource{cits.bib}
+
+\usepackage{floatrow}
+% Table float box with bottom caption, box width adjusted to content
+\newfloatcommand{capbtabbox}{table}[][\FBwidth]
+
+\author{Daniel Sääw (dks28)}
+\title{Data Science: Principles and Practice,\\ Diabetes Medical Data Set Report}
+\date{Michaelmas 2019}
+
+\begin{document}
+	\let\originalnewpage\newpage
+	\let\newpage\relax
+	\maketitle
+	\let\newpage\originalnewpage
+
+	\section{Data Exploration}
+
+	\subsection{Initial Decisions About Data Significance And Missing Values}
+
+	To begin, consider the task at hand. Since we 
+	ultimately aim to construct a mechanism for predicting the readmission status of an 
+	arbitrary patient, the features concerning  identification (\texttt{encounter\_id} and 
+	\texttt{patient\_nbr}) are essentially noise to our task, so 
+	I removed these features.
+
+	Among the remaining features, several  missed values.
+	Most notably, perhaps, \texttt{weight} only recorded categorical values for 300 samples. 
+	The feature \texttt{payer\_code} was even more sparse, detailing a value for only 235 samples. \\
+	I thus judged both these features too sparse for meaningful analysis and decided 
+	to drop both of these features as well.  
+
+	The last feature obviously missing a significant portion of its values (36.4\%) was 
+	\texttt{medical\_specialty}. \cite{Strack2014} 
+	included this feature, filling missing values with a new class. Instead, for this and a 
+	number of other features (e.g.\ \texttt{admission\_type\_id}) that encoded underlying 
+	missing values with some numerical ID (their share of effectively  missing values ranged 
+	between 11\% and 22\%), I 
+	decided to give no indication of value should it be missing.   
+
+	Finally, \texttt{race} was missing 180 values. Since there is no meaningful 
+	`average' race with which these missing values could have been imputed, I dropped those 
+	rows from the data set. \\
+	A further subset of the rows I dropped was that in which the
+	discharge disposition makes the question of readmission status (the question of interest)
+	redundant; the categories 
+	corresponding to patient death or 
+	transfer into a hospice. Thus, 9693 of
+	the samples were retained, with the readmission classes now distributed as `No'-32.2\%, 
+	`$> 30$ days'-33.94\% and `$\leq 30$ days'-33.86\%. 
+
+	\subsection{Distributions of Categorical Features and Impact on Data Representation}
+	
+	\begin{figure}
+		\includegraphics[width=\textwidth]{../distributions.pdf}
+		\caption{Empirical distributions of certain categorical features in the data set 
+		excluding samples with unrecorded value as well as encounters ending in death
+		or transfer to hospice.}
+		\label{figure:dists_cat_few_classes}
+	\end{figure}
+
+	The data set comprises mostly categorical features following different  
+	distributions, some of which are illustrated in figure \ref{figure:dists_cat_few_classes}. 
+	Note that for discharge disposition, admission type 
+	and admission source classes have been grouped according to their meaning. 
+	This served to reduce the number of distinct classes for each of these 
+	features, as well as improve the classes' balance. Note also how 
+	both the A1C test and the glucose serum tests  were conducted rarely overall. 
+
+	\begin{figure}
+	\includegraphics[width=\textwidth]{../diag_dist.pdf}
+	\caption{Complementary cumulative distribution of diagnosis frequency; the plot records the number of 
+	distinct diagnoses that are present at least some number of times in the data set.}
+	\label{figure:dist_diag}
+	\end{figure}
+	
+	Especially features with many categories follow extremely unbalanced distributions, 
+	for example the diagnoses. Figure \ref{figure:dist_diag} shows the distribution of diagnosis 
+	frequency, illustrating the multitude of  
+	diagnoses as well as their frequencies' highly heterogeneous distribution. This 
+	combination of attributes inhibits the effectiveness of usual numerical representations of 
+	categorical data, and since the data set includes less than half 
+	of possible diagnoses in ICD9, I decided to change their representation.\\
+	I thus consulted the ICD9 hierarchy of diagnoses to reduce the number of distinct 
+	classes to  20. Furthermore, since the three features do not fundamentally differ 
+	semantically, I combined them 
+	into one feature listing the classes of diagnoses made for each encounter. 
+
+	Another set of features warranting further thought was that of `generic' medications,
+	comprising 22 features, each of which drew from 4 categories:
+	`Up', `Down' and `Steady', indicating that the dosage of the medication was increased, 
+	decreased or kept steady, respectively, and `No', indicating 
+	that the medication was not prescribed. However, for
+	the vast majority of samples, most medications were unprescribed, with the generics 
+	having value `No' for around 95.1\% of samples on average, with Insulin being the most 
+	common prescription (prescribed for around 48.8\% of encounters) while Metformin was 
+	the second-most common, prescribed only 15.9\% of times. \\
+	Thus, my first idea for reducing this subset of features was to proceed similarly 
+	as before, clustering medications based on their similarities e.g.\ in terms of effect. 
+	However, my research showed that all were antidiabetic, particularly meant for diabetes type II. 
+	Hence, I created features recording the number of medications the dosages of 
+	which increased, decreased or remained steady, respectively, but not those not prescribed 
+	since this would carry little additional information.
+	
+	\begin{figure}
+		\includegraphics[width=\textwidth]{../proportions.pdf}
+		\caption{The proportions of the different readmission statuses within distinct 
+		categories of a subset of categorical features. Indicated in white is the average 
+		distribution in the reduced version of the data set from which certain rows have 
+		been dropped.}
+		\label{figure:readm_props}
+	\end{figure}
+	A final consideration: for the 
+	categorical features presented in figure \ref{figure:dists_cat_few_classes}, we should 
+	consider the distributions of the target variable within each class, remembering the 
+	categories' distributions. This information is 
+	presented in figure \ref{figure:readm_props}. Significantly represented categories 
+	do provide interesting insights here: For example, the data seems to carry 
+	little ethnic or gender bias, with reasonably high sample sizes inducing low 
+	deviation from the overall distribution within the categories. 
+
+	Secondly, age seems to correlate positively with readmission risk. 
+	\\
+	Finally: it seems that when the glucose serum 
+	test was at all conducted, the risk of readmission generally increased. This, 
+	perhaps, indicates that scenarios where the medical professional felt the blood sugar 
+	test was necessary justified more concern, premeditating readmission more strongly. 
+	Since conducting the test was also rare, I
+	joined the corresponding categories into one to balance the distribution of 
+	categories.
+
+	\subsection{Preview of Classification Process}
+	\begin{figure}
+	\begin{center}
+		\includegraphics[height=5cm]{../dimred1.pdf}
+		\end{center}
+		\caption{Two-dimensional representations of data set resulting from dimensionality 
+		reduction using PCA and tSNE, respectively. The units on $x$- and $y$-axes have 
+		been omitted since they bear no true real-world meaning.}
+		\label{figure:dimred1}
+	\end{figure}
+	To get an insight into how easy the classification task might be for actual
+	classifiers I plotted representations of the data to potentially identify meaningful 
+	clustering depending on the readmission status.
+	Using my chosen data representation, 
+	which initially comprised 66 dimensions, I hence applied both PCA and tSNE to obtain two-dimensional 
+	representations of the data. The results are laid out in figure 
+	\ref{figure:dimred1}. As can be seen, this representation of the data does not seem to 
+	exhibit a clear clustering of encounters with particular readmission statuses, indicating 
+	that my machine-learning implementations should perhaps be expected to be weak learners. \\
+	It should be noted that the plot displaying the results of tSNE distorts the units in the 
+	two dimensions relative to each other. However, the tick marks on both axes are spaced 
+	equidistantly to give some idea of the distance relationship. 
+
+	\section{Implementation and Application of Machine-Learning Algorithms}
+
+	\subsection{Motivations and Initial Decisions}
+	At this point, we should decide the exact problem to tackle and how to measure success.
+	\\
+	Strack et al.\ conducted binary classification to identify cases of readmission within 30 
+	days of the encounter. The authors were 
+	``primarily interested 
+	in factors that lead to early readmission'' \cite{Strack2014}. However, machine-learning 
+	implementations 
+	might more conceivably be used with the purpose of guiding either discharge decisions or 
+	preparations for a potential readmission, not necessarily within 30 days. Initially, 
+	therefore, I pursued the task of predicting whether a patient would be readmitted 
+	at all before moving on to multicategorical classification.
+
+	This in mind, I decided to prioritise recall over precision for the 
+	binary classification task, since using a machine-learning 
+	model to guide preparations  for patient readmission or discharge decisions, the graver error 
+	class would be false negatives, not false positives.
+
+	\subsection{First Steps}
+	First, I examined a number of standard classifiers to get an idea of the basic 
+	performance that was to be expected. Their respective performances  
+	under 10-fold cross-validation over a training set are recorded in 
+	table \ref{table:basicperformances}.
+	\begin{table}
+	\begin{center}
+		\begin{tabular}{R{4.65cm}C{2.2cm}C{2.2cm}C{2.2cm}C{2.2cm}C{0.1cm}}
+		& \textbf{Recall} & \textbf{Precision} & $\mathbf{F}_1$ & \textbf{Accuracy}& \\[10pt]
+		\hline
+		Majority Classifier & 100\% & 67.80\% & 80.81\% & 67.80\%& \\[10pt]
+		Support-Vector Machine & 99.73\% & 68.11\% & 80.94\% & 68.16\% &\\[10pt]
+		$k$-Neighbours Classifier & 93.76\% & 70.37\% & 80.40\% & 69.01\% &\\[10pt]
+		Logistic Regression & 92.14\% & 71.71\% & 80.65\% & 70.04\% &\\[10pt]
+		Gradient-Descent Classifier & 91.92\% & 71.10\% & 80.18\% & 69.19\%& \\[10pt]
+		Perceptron & 77.72\% & 71.80\% & 74.64\% & 64.20\% &\\[10pt]
+		Decision Tree & 72.21\% & 72.09\% & 72.15\% & 62.2\% &\\[10pt]
+		Na\"ive Bayes & 36.24\% & 78.78\% & 49.64\% & 50.15\% &\\[10pt]
+		\end{tabular}
+		\caption{Performance measures for a selection of basic classification mechanisms,
+		including majority classifier under 10-fold cross-validation over a subset of the 
+		data.}
+		\label{table:basicperformances}
+	\end{center}
+	\end{table}
+	\begin{table}
+	\begin{subtable}{.33\textwidth}
+	\begin{center}
+	{\small	
+	\begin{tabular}{R{0.66cm}|C{0.66cm}C{0.66cm}C{0.01cm}}
+		& PN & PP & \\[5pt]
+		\hline
+		RN & 42 & 2455  & \\[5pt] 
+		RP & 14 & 5243  & \\[5pt] 
+	\end{tabular}
+	}
+	\end{center}
+	\caption{Support-Vector Machine}
+	\end{subtable}%
+	\begin{subtable}{.33\textwidth}
+	\begin{center}
+	{\small	
+	\begin{tabular}{R{0.66cm}|C{0.66cm}C{0.66cm}C{0.01cm}}
+		& PN & PP & \\[5pt]
+		\hline
+		RN & 585 & 1912  & \\[5pt] 
+		RP & 411 & 4846  & \\[5pt] 
+	\end{tabular}
+	}
+	\end{center}
+	\caption{Logistic Regression}
+	\end{subtable}%
+	\begin{subtable}{.33\textwidth}
+	\begin{center}
+	{\small	
+	\begin{tabular}{R{0.66cm}|C{0.66cm}C{0.66cm}C{0.0cm}}
+		& PN & PP & \\[5pt]
+		\hline
+		RN & 533 & 1964  & \\[5pt] 
+		RP & 425 & 4832  & \\[5pt] 
+	\end{tabular}
+	}
+	\end{center}
+	\caption{Gradient-Descent Classifier}
+	\end{subtable}%
+	
+	\caption{Confusion matrices for high-recall classifiers listing the numbers of Real 
+	Negatives and Real Positives (RN and RP, respectively) classified as Negatives and 
+	Positives (PN and PP, respectively) by the respective classifier.}
+	\label{table:basicconfusions}
+	\end{table}
+	\begin{table}
+	\begin{center}
+		\begin{tabular}{R{4.65cm}C{2.2cm}C{2.2cm}C{2.2cm}C{2.2cm}C{0.1cm}}
+		& \textbf{Recall} & \textbf{Precision} & $\mathbf{F}_1$ & \textbf{Accuracy}& \\[10pt]
+		\hline
+		Hard-Voting Classifier & 92.33\% & 71.64\% & 80.68\% & 70.02\% &\\[10pt]
+		Soft-Voting Classifier & 92.30\% & 71.0\% & 80.26\% & 69.22\% &\\[10pt]
+		Random Forest & 91.48\% & 71.85\% & 80.49\% & 69.93\% &\\[10pt]
+		\end{tabular}
+		
+		\caption{Performance measures for a small selection of ensemble-based 
+		classification methods.}
+		\label{table:ensembleperf}
+	\end{center}
+	\end{table}
+	Note especially that here, the majority classifier will always predict that the patient 
+	would eventually be readmitted, leading to the perfect recall score. 
+	However, it should be noted that this is an 
+	artefact of sampling the data set such that the three readmission statuses are 
+	equifrequent; the original data set contained majoritatively encounters without 
+	record of readmission, such that a corresponding majority classifier would have recall 0 
+	for this task.
+	\\
+	In light of these performances, I also considered the confusion matrices for the 
+	classifiers with very `good' recall scores. These 
+	results are recorded in table \ref{table:basicconfusions}, and highlight that the 
+	performances largely resulted from the classifiers degenerating to 
+	near-majority-classifiers; obviously an undesirable outcome. 
+
+	It should also be pointed out that the data in table \ref{table:basicperformances} suggests 
+	that this is a reasonably hard task, as none of the classifiers' accuracies 
+	exceed that of the majority classifier by a large amount; with a number of the classifiers 
+	underperforming. Following this evaluation, I dropped the 
+	na\"ive-Bayes classifier and the perceptron from further consideration due to bad 
+	performance and redundance with the gradient-descent classifier, respectively. However, I 
+	experimented with the decision tree, optimising the parameters of the decision tree using 
+	a grid search. 
+	\\
+	This process found that, when optimising for recall, this classifier, too, would 
+	degenerate to the majority classifier, is 
+	no particularly useful insight. Instead, I optimised for `balanced 
+	accuracy', which measures the recall values for each class and is meant for use with 
+	unbalanced data sets such as this one. Now, the optimised decision tree has 
+	recall 82.14\%, precision 73.4\%, $F_1$-score 77.52\% and accuracy 67.71\%; 
+	still lower than that of the majority classifier.
+
+	Subsequently, I investigated how using ensemble methods for this data set would 
+	perform. I retained the logistic regression and gradient-descent classifiers 
+	from before as well as the optimised decision tree and the $k$-neighbours classifier (which 
+	used $k=50$)  for voting classifiers using both hard and soft voting.
+	Due to the similarity between the majority classifier and the SVM, I also discarded the 
+	latter.
+
+	\subsection{Ensemble Methods}
+	My initial experimentation with ensemble methods was to replicate the decision tree in a 
+	random forest. Indeed, 
+	as table \ref{table:ensembleperf} shows, the random forest did improve over the previous 
+	decision-tree performance. \\
+	More generally, I considered combining my chosen mechanisms' predictions 
+	via voting. Thus, I evaluated the 
+	performances of both a soft voter comprising the optimised decision tree, the logistic 
+	regression and the $k$-neighbours-classifier and a hard voter comprising the former two 
+	and a gradient-descent classifier; with performances outlined in table \ref{table:ensembleperf}. 
+
+	Notably, neither improve over the logistic regression in terms of accuracy. 
+	I therefore inspected how the predictions of each of the constituent voters, the voting 
+	classifier and the true labels correlated. The most common combinations of 
+	predictions and labels are listed in table \ref{table:predlabcomb}. There, we can see (as 
+	expected) that the most common cause for error was all voters 
+	yielding false positives. However, some of the most common 
+	combinations of predictions and underlying label are actually most classifiers yielding a 
+	false negative. This is peculiar, but indicates that there may be some subset of 
+	unreadmitted patients quite separate from others. To 
+	investigate remedies, I also evaluated the performance of adaptive-boosting 
+	classifiers based on the hard-voting classifier and the logistic 
+	regression and implemented a stacking classifier.
+	\\
+	After some experimentation, I found that the most performant configuration for this was to 
+	combine the predictions of the logistic regression, the decision tree and the $k$-nearest-%
+	neighbour classifiers using another logistic regressor. The results of both the 
+	adaptive-boosting and the stacking classifiers are recorded in table 
+	\ref{table:corrections}.
+
+	\begin{table}
+		\begin{center}
+			\begin{tabular}{C{0.12\textwidth}C{0.12\textwidth}C{0.12\textwidth}C{0.12\textwidth}|C{0.12\textwidth}|C{0.12\textwidth}C{0.0cm}}
+				Decision Tree & Log. Reg. & Gradient Descent & Voting Class. & Readm. Status & Samples &\\[10pt]
+				\hline
+				1& 1& 1& 1& 1&    4027&\\[10pt]
+				\color{red}1& \color{red}1& \color{red}1& \color{red}1& \color{red}0& \color{red}   1277\color{black}&\\[10pt]
+				0& 1& 1& 1& 1&     635&\\[10pt]
+				\color{red}0& \color{red}1& \color{red}1& \color{red}1& \color{red}0& \color{red}    490&\\[10pt]
+				0& 0& 0& 0& 0&     255&\\[10pt]
+				\color{red}0& \color{red}0& \color{red}0& \color{red}0& \color{red}1& \color{red}    142&\\[10pt]
+				1& 0& 0& 0& 0&     133&\\[10pt]
+				0& 0& 1& 0& 0&     115&\\[10pt]
+				1& 1& 0& 1& 1&     110&\\[10pt]
+				\color{red}1& \color{red}0& \color{red}0& \color{red}0& \color{red}1& \color{red}     99&\\[10pt]
+				\color{red}0& \color{red}0& \color{red}1& \color{red}0& \color{red}1& \color{red}     88&\\[10pt]
+			\end{tabular}
+		\end{center}
+		\caption{Frequencies of classifier predictions paired with the actual readmission 
+		statuses, including the \emph{hard}-voting classifier's predictions. Highlighted 
+		are combinations that yield false predictions in the hard voter.}
+		\label{table:predlabcomb}
+	\end{table}
+	\begin{table}
+	\begin{center}
+		\begin{tabular}{R{5.3cm}C{2cm}C{2cm}C{2cm}C{2cm}C{0.1cm}}
+		& \textbf{Recall} & \textbf{Precision} & $\mathbf{F}_1$ & \textbf{Accuracy}& \\[10pt]
+		\hline
+		Adaptive Boosting (Log. Reg.) & 94.56\% & 70.26\% & 80.62\% & 69.18\% &\\[10pt]
+		Stacking Classifier & 92.58\% & 71.57\% & 80.73\% & 70.04\% &\\[10pt]
+		Adaptive Boosting (Hard Voting) & 83.32\% & 72.56\% & 77.57\% & 67.33\%&\\[10pt]
+		\end{tabular}
+		
+		\caption{Performance measures for adptive-boosting- and stacking-based 
+		classification methods. Note that different boosting algorithms were used for the 
+		adaptive boosting of the hard voter and that of the logistic regression due to 
+		availability of classification-probability estimates.}
+		\label{table:corrections}
+	\end{center}
+	\end{table}
+
+	Table \ref{table:corrections} shows that this data set does not seem to be particularly 
+	conductive to adaptive boosting, as both resulting classifiers seem to perform worse than
+	their underlying original classifiers. 
+
+	Table \ref{table:corrections} also exhibits a phenomenon I have so far brushed over due to my original 
+	decision to prioritise recall: the precision-recall trade-off.
+
+	\begin{figure}
+
+	\begin{subfigure}{\textwidth}
+		\includegraphics[width=\textwidth]{../precreclog.pdf}
+		\caption{Logistic Regression}
+	\end{subfigure}
+	\begin{subfigure}{\textwidth}
+		\includegraphics[width=\textwidth]{../precrecrf.pdf}
+		\caption{Random Forest}
+	\end{subfigure}
+	\begin{subfigure}{\textwidth}
+		\includegraphics[width=\textwidth]{../precrecstack.pdf}
+		\caption{Stacking Classifier}
+	\end{subfigure}
+	\caption{Precision-recall trade-off for different classifiers, illustrated by the
+	measures' respective developments for different classifier conservativenesses (given 
+	as probability estimates required to classify a sample as a positive) as
+	well as the direct trade-off in values.}
+	\label{figure:precisionrecall}
+	\end{figure}
+	\begin{figure}
+	\begin{center}
+	\begin{subfigure}{.33\textwidth}
+		\includegraphics[width=\textwidth]{../roclog.pdf}
+		\caption{Logistic Regression}
+	\end{subfigure}%
+	\begin{subfigure}{.33\textwidth}
+		\includegraphics[width=\textwidth]{../rocrf.pdf}
+		\caption{Random-Forest Classifier}
+	\end{subfigure}%
+	\begin{subfigure}{.33\textwidth}
+		\includegraphics[width=\textwidth]{../rocstc.pdf}
+		\caption{Stacking Classifier}
+	\end{subfigure}%
+	\end{center}
+	\caption{Receiver-operating characteristic (ROC) plots for varying degrees of conservativeness 
+	in the three classifiers, as well as their respective area-under-curve (AUC) scores.}
+	\label{figure:rocs}
+	\end{figure}
+
+	\subsection{The Precision-Recall Trade-Off and Further Evaluation}
+	Let me 
+	highlight the following three classifiers in particular: The 
+	logistic regression, random forest discussed briefly as well as my stacking classifier, 
+	each of which had recall exceeding 90\% and among the highest 
+	accuracies on the data set so far, while both of these measures 
+	exceed the classifiers' precisions score significantly. In the real-world, we may 
+	care about investigating a more careful trade-off by tweaking how conservative the 
+	classifiers are. 
+
+	Investigating this leads to the results of 
+	figure \ref{figure:precisionrecall}, which show the development of precision and recall 
+	for each of these classifiers with different degrees of conservativeness, as well as the 
+	development of precision with increasing recall. The trade-off nature between the two 
+	measures is clearly visible in these graphs, with a general tendency to see a more rapid 
+	decline in recall than the corresponding rise in precision due 
+	the unbalanced nature of the data set. 
+	
+	Since these classifiers behave almost identically for this data set in 
+	terms of the precision-recall trade-off, I also considered another means of evaluation for 
+	the performance on this data set, the receiver-operating characteristic (ROC), which by the 
+	area-under-curve (AUC) measurement, offers a numerical 
+	judgement about classifier quality in the face of qualitatively similar performance as is the case 
+	here. The ROC curves for each of these three classifiers, as well as their respective AUC
+	scores are given in figure \ref{figure:rocs}. This figure reaffirms that the classifiers'
+	performances are very similar; the AUC measure however credits the random-forest 
+	classifier with a narrow advantage over the other two, that had previously 
+	slightly outperformed it without considering these trade-offs.
+
+	\subsection{Multicategorical Classification}
+	Of course, the more refined problem of predicting a time frame for 
+	readmission is also of interest.  I again retained the three 
+	classifiers from 
+	the previous section due to their relatively high accuracies,
+	as well has the hard-voting classifier that also exceeded 70\% accuracy in binary 
+	classification. 
+	
+	\begin{table}
+	\centering	
+		\begin{subtable}[t]{.465\textwidth}
+			\begin{center}
+				\begin{tabular}[t]{R{.55\textwidth}L{.23\textwidth}C{0.01\textwidth}}
+					\textbf{Classifier} & \textbf{Accuracy} &\\[10pt]
+					\hline
+					Random-Forest Classifier & 50.95\% &\\[10pt] 
+					Stacking Classifier & 50.30\% &\\[10pt]
+					Logistic Regression & 49.59\% &\\[10pt]
+					Hard-Voting Classifier & 48.99\% &\\[10pt]
+				\end{tabular}
+			\end{center}
+			\caption{Accuracies of classifiers with good performances in the 
+			binary-classification setting.}
+			\label{table:multiclassacca}
+		\end{subtable}%
+		\hspace{.05\textwidth}%
+		\begin{subtable}[t]{.465\textwidth}
+			\begin{center}
+				\begin{tabular}[t]{R{.55\textwidth}L{.23\textwidth}C{0.01\textwidth}}
+					\textbf{Classifier} & \textbf{Accuracy} &\\[10pt]
+					\hline
+					Random-Forest Classifier & 49.66\% &\\[10pt] 
+					Stacking Classifier & 50.14\% &\\[10pt]
+					Logistic Regression & 49.59\% &\\[10pt]
+					Hard-Voting Classifier & 48.68\% &\\[10pt]
+				\end{tabular}
+			\end{center}
+			\caption{Accuracies of the same classifiers when trained on a reduced set 
+			of features comprising only the most significant to classification process.}
+			\label{table:multiclassaccb}
+		\end{subtable}	
+		\caption{Accuracy measurements for the task of multicategorical classification.}
+	\end{table}
+
+	These classifiers' accuracies are recorded in table 
+	\ref{table:multiclassacca}.
+	Although accuracies of around 50\% may seem discouragingly low at first, 
+	I should point out that a majority classifier here would merely be accurate 
+	around 34\% of the time, meaning that we do see a fairly considerable improvement over the 
+	most na\"ive classifier here, especially considering the early  indication that the data 
+	would not be easily separable.  
+	\begin{figure}
+		\includegraphics[width=\textwidth]{../dimred2.pdf}
+		\caption{2-Dimensional representations of the data set as represented by the 20 
+		features most significant to successful classification, as generated by PCA and 
+		tSNE, respectively. As before, it should be noted that the axes tick lines for the 
+		plot regarding tSNE are spaced equidistantly in place of adjusting the aspect 
+		ratio to the same effect.}
+		\label{figure:dimred2}
+	\end{figure}
+
+	I also considered the possibility of reducing the number of 
+	features in the data to potentially improve performance; I therefore isolated the 20 
+	features deemed most significant by the random-forest classifier and evaluated whether 
+	using these might help improve 
+	accuracy. I re\"examined dimensionality reduction to 
+	investigate whether the extraneous features had obscured some underlying clustering. The results 
+	are displayed in figure 
+	\ref{figure:dimred2}, which shows that this was not the case to an extent obvious to the 
+	naked eye. I proceeded to evaluate the classifiers from before on the 
+	reduced training data, with the results presented in table \ref{table:multiclassaccb}, 
+	which shows that reducing the data set in this way does not 
+	improve performance after all. 
+
+	As a final piece of analysis, consider
+	figure \ref{figure:misclheat}, which indicates, for each of the classifiers, 
+	the frequencies of the different kinds of misclassification. These results indicate that
+	misclassification of encounters where readmission had been recorded was comparably likely 
+	to be as the other category of readmission or as no predicted readmission, which is 
+	perhaps  surprising as a layman's intuition might suggest that readmission within thirty 
+	days may be more similar to later readmission than 
+	no readmission at all, but for the hypothesis that the categories are simply hard to separate.
+	
+	\begin{figure}
+		\centering
+		\begin{subfigure}{.3\textwidth}
+		\centering
+		\includegraphics[height=.67\textwidth]{../rfhtmp.pdf}
+		\caption{Random Forest}
+		\end{subfigure}\hspace{-3mm}%
+		\begin{subfigure}{.2\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{../stchtmp.pdf}
+		\caption{Stacking}
+		\end{subfigure}%
+		\begin{subfigure}{.2\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{../loghtmp.pdf}
+		\caption{Logistic Regression}
+		\end{subfigure}%
+		\begin{subfigure}{.2\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{../hvthtmp.pdf}
+		\caption{Hard-Voting}
+		\end{subfigure}%
+		\caption{Qualitative relative frequencies of misclassifications by classifier and 
+		underlying label.}
+		\label{figure:misclheat}
+	\end{figure}
+
+	\begin{table}
+	\begin{center}
+		\begin{tabular}{R{4.65cm}C{1.8cm}C{1.8cm}C{1.8cm}C{1.8cm}C{1.8cm}C{0.1cm}}
+		& \textbf{Recall} & \textbf{Precision} & $\mathbf{F}_1$ & \textbf{Accuracy} 
+		(Binary)& \textbf{Accuracy} (Multi.) &\\[10pt]
+		\hline
+		Stacking Classifier & 93.46\% & 72.21\% & 81.47\% & 71.17\%    &50.49\%&\\[10pt]
+		Hard-Voting Classifier & 93.16\% & 71.51\% & 80.91\% & 70.19\% &50.28\%&\\[10pt]
+		Logistic Regression & 93.08\% & 71.62\% & 80.95\% & 70.29\%    &49.61\%&\\[10pt]
+		Random Forest & 92.85\% & 72.46\% & 81.4\% & 71.22\%           &50.18\%&\\[10pt]
+		\end{tabular}
+			    
+	\caption{Performance of Classifiers on Test Set.}	
+	\label{table:testeval}
+	\end{center}
+	\end{table}
+
+
+	\section{Final Evaluation}
+	To conclude, I present a brief evaluation of these classifiers on a test set that had been 
+	isolated from the development process.
+	This evaluation should yield some indication of how performant the algorithms might be 
+	 when applied to a real-world test with genuinely new data. The results of 
+	this are presented in table \ref{table:testeval} and 
+	suggest that the classifiers were 
+	not overfit to the training set and so are fairly robust to new data, since they reflect a 
+	slight improvement over the results we had obtained 
+	for the training data. This implies that our 
+	previous results were 
+	 representative of a potential real-world application under this empirical distribution of 
+	 readmission records.
+
+	\printbibliography
+\end{document}

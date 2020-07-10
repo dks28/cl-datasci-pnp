@@ -1,0 +1,204 @@
+\documentclass[10pt, twoside, a4paper]{article}
+
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+\usepackage{subcaption}
+
+\usepackage{graphicx}
+\usepackage[margin=0.87in]{geometry}
+\usepackage{amssymb}
+\usepackage{color, colortbl}
+\usepackage{amsmath}
+\usepackage[backend=biber]{biblatex}
+\addbibresource{cits.bib}
+
+\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+
+\usepackage{floatrow}
+% Table float box with bottom caption, box width adjusted to content
+\newfloatcommand{capbtabbox}{table}[][\FBwidth]
+
+\author{Daniel Sääw (dks28)}
+\title{Data Science: Principles and Practice,\\ Final Assignment B}
+\date{Lent 2020}
+
+\begin{document}
+	\let\originalnewpage\newpage
+	\let\newpage\relax
+	\maketitle
+	\let\newpage\originalnewpage
+
+	\section{Data Preparation}
+
+	The full data set from which a portion served as the foundation for Assignment A originally
+	spanned 101765 samples over 50 features. \\
+	Due to the nature of the task at hand, predicting a patient's next medical encounter's 
+	duration, of those samples I removed the patients that only occurred once, which 
+	eliminated about 55\% of samples (corresponding to around 77\% of patients). 
+	Of course, I also needed to remove each sample representing a patient's final recorded 
+	encounter. Once these preliminary selections had taken place, some initial investigations 
+	revealed that the shares of missing values in certain features had changed dramatically 
+	between the full and the reduced data set: for example, the \texttt{payer\_code} feature, 
+	which had been missing in all but 235 samples in the data set for Assignment A only missed
+	around 30\% of values in this version of the data. The \texttt{weight} feature was 
+	insignificant here, too (due to the historical development of US medical records 
+	standards), so I once again excluded this feature. Meanwhile, the \texttt{medical\_specialty} 
+	feature had significantly more 
+	missing values in this version of the data set, at around 51\%. However, due to the general
+	nature of neural networks as being considered able to learn the meaning of missing values,
+	I decided to retain the feature.
+	
+	Overall, I made few other changes at this stage compared to my proceedings at Assignment A
+	(and any feature I do not mention explicitly here was treated in the same way).
+	Most notably, I clustered the diagnosis features in the same way, by changing their values
+	to higher-level ICD9 diagnoses and grouping the three diagnosis features. 
+
+	Meanwhile, I decided to trust the efficacy of neural networks on other matters, including 
+	the discharge dispositions I dropped for Assignment A, as well as retaining the original 
+	glucose serum test feature and masking missing values in any other features. Most notably, 
+	perhaps, I used simple one-hot enoding for the 28 features describing the prescription 
+	statuses of various medications.
+
+	The results of this progress were as follows: a total of 30248 samples remained, whilst 
+	the total number of features changed to 46, of which 6 were numerical. Overall, the 
+	numerical representation has 182 features.
+
+	\section{Loss Function}
+
+	In this section, I describe two probability models I considered in my work, their 
+	relative merits, and derive the loss functions one should minimise to implement the 
+	respective models in a neural network. These two models a Poisson model 
+	and a Categorical model, respectively. I originally explored modelling the data as being 
+	binomially distributed, but observed poor performance.
+	
+	In this section, I will speak of the label of the $i$th sample $\mathbf{x}_i$ (i.e.\ the 
+	duration of the next medical encounter with that patient) as $y_i$, where the associated 
+	random variable $Y_i$ follows some probability distribution $Y_i \sim 
+	\mathrm{Pr}(\mathbf{x}_i)$, and of the output of my machine-learning algorithms as
+	$f_\theta(\mathbf{x}_i)$.
+
+	\subsection{The Poisson Model}
+	Formally, here, I mean to model my data as $Y_i \sim \mathrm{Poiss}(f_\theta(\mathbf{x}_i))$.
+	By defining the likelihood of some values for parameters $\theta$ given samples $y_i$ as the probability of observing the $y_i$ induced by those values $\theta$ and maximising its natural logarithm instead, one may derive that fitting this model is achieved by minimising
+	$$
+		\sum_i f_\theta(\mathbf x_i) - y_i \cdot \ln f_\theta(\mathbf x_i).
+	$$
+	This model should have the positive attribute 
+
+	\subsection{The Categorical Model}
+	The categorical distribution is the most general discrete probability distribution: there 
+	is no parameterised form, only an explicit probability vector, in this model specified by 
+	$\mathrm{Pr}_{Y_i}(y_i) = f_\theta(\mathbf x_i)(y_i)$. If we now represent the label $y_i$
+	as the probability distribution $\mathrm{Pr}_{y_i}(y) = 1[y = y_i]$, then we get that we can 
+	maximise the likelihood of $\theta$ by maximising 
+	$$
+		\sum_i \ln\left(\mathrm{Pr}_{Y_i}(y_i)\right) = \sum_i \sum_{j = 1}^{j=14}
+		\mathrm{Pr}_{y_i}(j) \ln\mathrm{Pr}_{Y_i}(j)
+	$$
+	i.e.\ minimising the sum of the cross-entropies of the empirical probability distributions 
+	$\mathrm{Pr}_{y_i}$ and the predicted probability distributions $f_\theta(\mathbf x_i)$.
+
+	This model makes full use of the generality of neural networks, by making the fewest 
+	possible assumptions about the data. This, in combination with the added benefit of 
+	gaining an idea of a probability distribution rather than just obtaining a prediction 
+	might deliver improved performance at the cost of longer training times.
+
+	\section{Machine-learning Algorithms Implementation}
+	In this section, I provide descritpions of the various ways in which I use neural networks 
+	to make predictions about subsequent encounter durations, and explain what I hope to 
+	achieve with them. The bulk of these will involve the basic neural-network structure of 
+	multi-layer perceptrons using rectified-linear-unit activation functions at each neuron. I 
+	have fixed this choice just in order to restrict the search space of this assignment. 
+
+	I further explain how reducing the dimensionality of the input space using PCA may prove to
+	affect training time and performance.
+
+	\subsection{Basic Learning}
+
+	To establish a base-line, I first used a number of different neural networks the 
+	differences of which are chiefly in the number of neurons per layer and the number of 
+	layers. I decided to establish such a base-line by training 3 networks, the smallest of 
+	which would have 5 layers with between 150 and 40 neurons each (on the internal layers), 
+	the second of which would have 7 layers with between 325 and 50 neurons per internal layer 
+	and the largest of which would have 10 layers of between 450 and 50 neurons on each 
+	internal layer.
+
+	Intuitively, one would expect that network size would correlate positively with training 
+	time (in the sense that they increase with each other), while correlating negatively with
+	underfitting. In particular, one might increase the risk of overfitting by training 
+	excessively large networks. 
+
+	\subsection{Principal-Components Prediction}
+
+	One potential way of mitigating extended training time is to subject the feature space 
+	to dimensionality reduction using PCA before training any neural networks. This technique 
+	is sometimes used in regression tasks, when it is known as \emph{principal components 
+	regression}. However, when it is used in this way, it is commonly done for the purpose of 
+	preventing overfitting, as PCA essentially decreases the impact of noise on the data space. 
+
+	With respect to this setting, therefore, there may be a benefit in making the use of more
+	complex networks feasible regarding time cost, and making them more robust to overfitting,
+	thus allowing us to exploit more powerful tools at our disposal for this task.
+
+	\section{Measurement}
+	\label{section:measure}
+	This section describes the training process of each of these variations on my neural 
+	networks. To this end, I will compare the different networks primarily based on the 
+	metrics of time until apparent convergence and the time it takes before the 
+	network's loss when making predictions over a development set chosen in advance begins to 
+	diverge. The development set was chosen, along with a validation set by picking two clusters comprising approximately 
+	15\% of samples each from a dimensionality-reduced representation of the data (see Fig.\ \ref{fig:tsne}).  
+
+	\subsection{Measurement of Basic Network Structures}
+	Here, I present my findings for the training of basic multi-layer perceptrons. The 
+	developments of loss (with respect to both the Poisson and Categorical models) when 
+	training on batches of 100 samples over time are presented in Figure \ref{fig:mlpmeasure}.
+	I have indicated indivdual batches' losses for the training set in a low opacity to give 
+	an idea of the variation across batches, while the heavier black line indicates the 
+	average over the last 5 loss values, given an idea of the overall loss development. I only
+	present the latter kind for the development set loss.
+
+	For now, I will reserve any judgement about which model produces `better' results. It is 
+	noteworthy, though, how the relative difference between loss on the training data set and 
+	loss on the development data set develops; with the development loss remaining at least 
+	somewhat close (even after a clear overfit to the training data is observable) to that on 
+	the training data when optimising for Poisson loss, whilst the 
+	overfitting of the neural network to the training set seems to take place very drastically 
+	and quickly under cross-entropy loss. 
+
+	Fig.\ \ref{fig:mlpconv} compares the convergence speeds for the three different network 
+	sizes when optimising for the two kinds of loss. It is notable that here, the performance 
+	of the larger networks even on the training data (when optimising for Poisson loss) does 
+	not exceed that of the smaller networks, all the while converging slower, suggesting that 
+	scaling the networks beyond a certain threshold is ineffective when using Poisson loss.
+
+	Meanwhile, the larger networks do outperform the smallest when modelling the data 
+	accoridng to a categorical distribution, suggesting that the more complex nature of the 
+	prediction task actually benefits from the increased complexity of the neural network at 
+	hand.
+
+	\subsection{Measurement of Principal-Component Networks}
+	In this section, we will investigate our hopes that using PCA to reduce the data's 
+	dimensionality before subjecting it to machine-learning models might reduce training time 
+	and the risk of overfitting. For this purpose, let me now fix the medium-sized neural 
+	network that exhibited the best trade-off between training speed and performance before.
+	Recall that the original neural networks took 182 input dimensions. I investigated 
+	reducing that number to 50, 85 and 125, the results of which are recorded in figures 
+	\ref{figure:pcameasure} and \ref{figure:pcaconverge}.
+
+	We observe that, for the Poisson model, neither of our hopes was fulfilled, as convergence was not noticeably 
+	accelerated and overfitting to the training data was exacerbated, if anything. For the 
+	categorical model we make the latter observation again, but the training process was 
+	significantly faster using the dimensionality-reduced data, indicating that phrasing the 
+	problem as a number-independent classification\footnote{the categorical distribution 
+	considers values $1$ and $2$ as different as $4$ and $14$.} is made easier by considering 
+	only the principal components of the data space. Upon reflection, this might reflect the 
+	fact that the categorical distibution enforces no restrictions, thus allowing the model to easily overfit.
+
+	\section{Evaluation}
+	In this section, I provide a 
+
+\end{document}
